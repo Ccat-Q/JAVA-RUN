@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/napcat-export-20260826
+      - main
   workflow_dispatch:
 
 permissions:
@@ -29,7 +30,9 @@ jobs:
           NAPCAT_CID="$(docker create mlikiowa/napcat-docker:latest)"
           trap 'docker rm -f "$MAIBOT_CID" "$NAPCAT_CID" >/dev/null 2>&1 || true' EXIT
           docker cp "$MAIBOT_CID:/MaiMBot/pyproject.toml" release/maibot-pyproject.toml
-          docker cp "$NAPCAT_CID:/app/napcat/package.json" release/napcat-package.json
+          NAPCAT_PACKAGE_PATH="$(docker run --rm --entrypoint /bin/sh mlikiowa/napcat-docker:latest -c 'find / -type f -name package.json 2>/dev/null | head -n 1')"
+          test -n "$NAPCAT_PACKAGE_PATH"
+          docker cp "$NAPCAT_CID:$NAPCAT_PACKAGE_PATH" release/napcat-package.json
           {
             echo "Created (UTC): $(date -u +%FT%TZ)"
             echo
