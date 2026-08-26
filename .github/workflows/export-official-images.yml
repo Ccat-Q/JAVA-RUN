@@ -1,0 +1,56 @@
+name: Export official latest MaiBot and NapCat
+
+on:
+  push:
+    branches:
+      - codex/napcat-export-20260826
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Pull official latest images
+        run: |
+          set -euo pipefail
+          docker pull sengokucola/maibot:latest
+          docker pull mlikiowa/napcat-docker:latest
+      - name: Record image versions and digests
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          MAIBOT_CID="$(docker create sengokucola/maibot:latest)"
+          NAPCAT_CID="$(docker create mlikiowa/napcat-docker:latest)"
+          trap 'docker rm -f "$MAIBOT_CID" "$NAPCAT_CID" >/dev/null 2>&1 || true' EXIT
+          docker cp "$MAIBOT_CID:/MaiMBot/pyproject.toml" release/maibot-pyproject.toml
+          docker cp "$NAPCAT_CID:/app/napcat/package.json" release/napcat-package.json
+          {
+            echo "Created (UTC): $(date -u +%FT%TZ)"
+            echo
+            echo "MaiBot image digest:"
+            docker image inspect sengokucola/maibot:latest --format '{{index .RepoDigests 0}}'
+            echo "MaiBot package version:"
+            grep -m1 '^version' release/maibot-pyproject.toml || true
+            echo
+            echo "NapCat image digest:"
+            docker image inspect mlikiowa/napcat-docker:latest --format '{{index .RepoDigests 0}}'
+            echo "NapCat package version:"
+            node -p "require('./release/napcat-package.json').version"
+          } | tee release/VERSIONS.txt
+      - name: Export and checksum images
+        run: |
+          set -euo pipefail
+          docker save sengokucola/maibot:latest | zstd -T0 -10 -o release/maibot-latest.tar.zst
+          docker save mlikiowa/napcat-docker:latest | zstd -T0 -10 -o release/napcat-latest.tar.zst
+          (cd release && sha256sum *.tar.zst > SHA256SUMS.txt)
+      - name: Publish temporary public release
+        run: |
+          set -euo pipefail
+          TAG="image-transfer-${{ github.run_id }}"
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "Temporary MaiBot and NapCat image export" --notes-file release/VERSIONS.txt release/maibot-latest.tar.zst release/napcat-latest.tar.zst release/SHA256SUMS.txt release/VERSIONS.txt
