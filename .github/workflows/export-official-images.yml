@@ -58,4 +58,5 @@ jobs:
         run: |
           set -euo pipefail
           TAG="image-transfer-${{ github.run_id }}"
+          export GH_REPO="$GITHUB_REPOSITORY"
           gh release create "$TAG" --target "$GITHUB_SHA" --title "Temporary MaiBot and NapCat image export" --notes-file release/VERSIONS.txt release/maibot-latest.tar.zst release/napcat-latest.tar.zst release/SHA256SUMS.txt release/VERSIONS.txt
